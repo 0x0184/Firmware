@@ -104,6 +104,14 @@
 #include <uORB/topics/sensor_mag.h>
 #include <uORB/topics/vehicle_air_data.h>
 #include <uORB/topics/vehicle_magnetometer.h>
+
+/**
+ * ISLAB custom MAVLink messages below. ===============================
+ */
+#include <uORB/topics/ca_trajectory.h>
+#include <v1.0/custom_messages/mavlink_msg_ca_trajectory.h>
+// ====================================================================
+
 #include <uORB/uORB.h>
 
 using matrix::wrap_2pi;
@@ -4578,6 +4586,65 @@ protected:
 	}
 };
 
+/**
+ * ISLAB custom MAVLink message classes.
+ */
+class MavlinkStreamCaTrajectory : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamCaTrajectory::get_name_static();
+	}
+	static const char *get_name_static()
+	{
+		return "CA_TRAJECTORY";
+	}
+	uint8_t get_id()
+	{
+		return MAVLINK_MSG_ID_CA_TRAJECTORY;
+	}
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamCaTrajectory(mavlink);
+	}
+	unsigned get_size()
+	{
+		return MAVLINK_MSG_ID_CA_TRAJECTORY_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+	}
+
+private:
+	MavlinkOrbSubscription *_sub;
+	uint64_t _ca_traj_time;
+
+	// do not allow top copying this class.
+	MavlinkStreamCaTrajectory(MavlinkStreamCaTrajectory &);
+	MavlinkStreamCaTrajectory& operator = (const MavlinkStreamCaTrajectory &);
+
+protected:
+	explicit MavlinkStreamCaTrajectory(Mavlink *mavlink) : MavlinkStream(mavlink),
+		_sub(_mavlink->add_orb_subscription(ORB_ID(ca_trajectory))),	// make sure you enter the name of your uORB topic here.
+		_ca_traj_time(0)
+	{}
+
+	void send(const hrt_abstime t)
+	{
+		struct ca_traj_struct_s _ca_trajectory;
+
+		if (_sub->update(&_ca_traj_time, &_ca_trajectory)) {
+			mavlink_ca_trajectory_t _msg_ca_trajectory;		// make sure mavlink_ca_trajectory is the definition of your custom MAVLink message.
+
+			_msg_ca_trajectory.timestamp = _ca_trajectory.timestamp;
+			_msg_ca_trajectory.time_start_usec = _ca_trajectory.time_start_usec;
+			_msg_ca_trajectory.time_stop_usec = _ca_trajectory.time_stop_usec;
+			_msg_ca_trajectory.coefficients = _ca_trajectory.coefficients;
+			_msg_ca_trajectory.seq_id = _ca_trajectory.seq_id;
+
+			_mavlink->send_message(MAVLINK_MSG_ID_CA_TRAJECTORY, &_msg_ca_trajectory);
+		}
+	}
+};
+
 static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static, &MavlinkStreamHeartbeat::get_id_static),
 	StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static, &MavlinkStreamStatustext::get_id_static),
@@ -4635,6 +4702,10 @@ static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamHighLatency2::new_instance, &MavlinkStreamHighLatency2::get_name_static, &MavlinkStreamHighLatency2::get_id_static),
 	StreamListItem(&MavlinkStreamGroundTruth::new_instance, &MavlinkStreamGroundTruth::get_name_static, &MavlinkStreamGroundTruth::get_id_static),
 	StreamListItem(&MavlinkStreamPing::new_instance, &MavlinkStreamPing::get_name_static, &MavlinkStreamPing::get_id_static)
+	// ISLAB custom MAVLink message.
+	// new StreamListItem(&MavlinkStreamCaTrajectory::new_instance, &MavlinkStreamCaTrajectory::get_name_static), nullptr
+	,
+	StreamListItem(&MavlinkStreamCaTrajectory::new_instance, &MavlinkStreamCaTrajectory::get_name_static)
 };
 
 const char *get_stream_name(const uint16_t msg_id)
